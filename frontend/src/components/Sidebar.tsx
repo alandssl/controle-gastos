@@ -4,7 +4,6 @@ import {
   Users, 
   CheckSquare, 
   CreditCard, 
-  Wifi, 
   Wallet
 } from 'lucide-react';
 import type { ActiveTab } from '../types';
@@ -23,14 +22,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   onCloseMobile,
 }) => {
-  const { usuarios, activeUserId, setActiveUserId, isWsConnected, isBackendOnline } = useFinancial();
+  const { usuarios, activeUserId, setActiveUserId, isBackendOnline } = useFinancial();
 
   const navItems: Array<{ id: ActiveTab; label: string; icon: React.ReactNode; badge?: string }> = [
     { id: 'dashboard', label: 'Visão Geral', icon: <LayoutDashboard size={18} /> },
     { id: 'gastos', label: 'Contas do Mês', icon: <CheckSquare size={18} /> },
     { id: 'usuarios', label: 'Pessoas', icon: <Users size={18} />, badge: `${usuarios.length}` },
     { id: 'pagamentos', label: 'Cartões & Faturas', icon: <CreditCard size={18} /> },
-    { id: 'websocket', label: 'Sincronização', icon: <Wifi size={18} /> },
   ];
 
   return (

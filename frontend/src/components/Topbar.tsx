@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, RefreshCw, User, CheckCircle2 } from 'lucide-react';
+import { Menu, RefreshCw, User } from 'lucide-react';
 import type { ActiveTab } from '../types';
 import { useFinancial } from '../context/FinancialContext';
 
@@ -21,7 +21,6 @@ export const Topbar: React.FC<TopbarProps> = ({ currentTab, onOpenMobileMenu }) 
       case 'gastos': return 'Contas do Mês';
       case 'usuarios': return 'Pessoas Cadastradas';
       case 'pagamentos': return 'Cartões & Formas de Pagamento';
-      case 'websocket': return 'Sincronização & Tempo Real';
     }
   };
 

@@ -8,7 +8,22 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/usuario': {
-        target: 'http://localhost:3000',
+        target: 'http://127.0.0.1:3000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/gastos': {
+        target: 'http://127.0.0.1:3000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/pagamento': {
+        target: 'http://127.0.0.1:3000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/cartao': {
+        target: 'http://127.0.0.1:3000',
         changeOrigin: true,
         secure: false,
       },

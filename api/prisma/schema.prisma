@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+
+model Usuario{
+  id Int @id @default(autoincrement())
+  nome String
+  salario Float
+  diaSalario Int
+  gastos Gasto[]
+  cartoes Cartao[]
+}
+
+model Gasto{
+  id Int @id @default(autoincrement())
+  descricao String
+  tipoGasto TipoGasto
+  valorGasto Float
+  dataGasto DateTime
+  usuarioId Int
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+  pagamentoId Int?
+  pagamento Pagamento? @relation(fields: [pagamentoId], references: [id])
+}
+
+model Pagamento{
+  id Int @id @default(autoincrement())
+  valorPago Float?
+  dataPago DateTime?
+  pagamentoFeito Boolean @default(false)
+  tipoPagamento TipoPagamento?
+  cartaoId Int?
+  cartao Cartao? @relation(fields: [cartaoId], references: [id])
+  gastos Gasto[]
+  parcelas Int?
+  valorParcela Float?
+  parcelasPagas Int @default(0)
+  valorTotal Float
+}
+
+model Cartao {
+  id Int @id @default(autoincrement())
+  diaVencimento Int
+  valorFaturaMes Float
+  pagamento Pagamento[]
+  usuarioId Int
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+}
+
+enum TipoGasto{
+  ALIMENTACAO
+  TRANSPORTE
+  COMPRAS
+  LAZER
+  SAUDE
+  CASA
+  OUTROS
+}
+
+enum TipoPagamento{
+  DEBITO
+  PIX
+  CREDITO
+}

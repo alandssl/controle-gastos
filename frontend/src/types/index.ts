@@ -12,16 +12,28 @@ export type TipoPagamento =
   | 'PIX' 
   | 'CREDITO';
 
+export interface Cartao {
+  id: number;
+  diaVencimento: number;
+  valorFaturaMes: number;
+  usuarioId: number;
+  usuario?: Usuario;
+  pagamento?: Pagamento[];
+}
+
 export interface Pagamento {
   id: number;
   valorPago?: number;
   dataPago?: string | null;
   pagamentoFeito: boolean;
   tipoPagamento?: TipoPagamento;
-  cartao?: string;
-  gastoId: number;
+  cartaoId?: number | null;
+  cartao?: Cartao | string;
+  gastoId?: number;
   parcelas?: number;
   valorParcela?: number;
+  parcelasPagas?: number;
+  valorTotal?: number;
 }
 
 export interface Gasto {
@@ -31,6 +43,9 @@ export interface Gasto {
   valorGasto: number;
   dataGasto: string;
   usuarioId: number;
+  pagamentoId?: number | null;
+  usuario?: Usuario;
+  pagamento?: Pagamento | null;
   pagamentos: Pagamento[];
 }
 
@@ -40,6 +55,7 @@ export interface Usuario {
   salario: number;
   diaSalario: number;
   gastos?: Gasto[];
+  cartoes?: Cartao[];
   createdAt?: string;
 }
 
@@ -56,10 +72,22 @@ export interface FinancialSummary {
   porTipoPagamento: Record<TipoPagamento, { total: number; count: number }>;
 }
 
-export type ActiveTab = 'dashboard' | 'usuarios' | 'gastos' | 'pagamentos' | 'websocket';
+export type ActiveTab = 'dashboard' | 'usuarios' | 'gastos' | 'pagamentos';
 
 export interface WsMessagePayload {
-  type: 'USER_CREATED' | 'USER_UPDATED' | 'USER_DELETED' | 'GASTO_ADDED' | 'GASTO_UPDATED' | 'GASTO_DELETED' | 'PAGAMENTO_TOGGLED' | 'SYNC_ALL' | 'PING' | 'PONG';
+  type: 
+    | 'USER_CREATED' 
+    | 'USER_UPDATED' 
+    | 'USER_DELETED' 
+    | 'GASTO_ADDED' 
+    | 'GASTO_UPDATED' 
+    | 'GASTO_DELETED' 
+    | 'PAGAMENTO_TOGGLED' 
+    | 'CARTAO_CREATED' 
+    | 'CARTAO_DELETED' 
+    | 'SYNC_ALL' 
+    | 'PING' 
+    | 'PONG';
   data?: any;
   timestamp: string;
   source?: string;

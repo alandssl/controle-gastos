@@ -5,9 +5,7 @@ import {
   Search, 
   Edit3, 
   Trash2, 
-  Calendar,
-  X,
-  Check
+  X
 } from 'lucide-react';
 import { useFinancial } from '../context/FinancialContext';
 import type { Usuario } from '../types';
@@ -22,7 +20,6 @@ export const UsuariosView: React.FC = () => {
     updateUsuario, 
     deleteUsuario, 
     refreshUsuarios,
-    isBackendOnline,
     gastos
   } = useFinancial();
 
@@ -40,6 +37,7 @@ export const UsuariosView: React.FC = () => {
     diaSalario: '5',
   });
   const [formError, setFormError] = useState('');
+  const [deleteError, setDeleteError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Search debounce
@@ -136,11 +134,13 @@ export const UsuariosView: React.FC = () => {
   const handleConfirmDelete = async () => {
     if (!deletingUser) return;
     try {
+      setDeleteError('');
       setIsSubmitting(true);
       await deleteUsuario(deletingUser.id);
       setDeletingUser(null);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("Falha ao excluir pessoa:", err);
+      setDeleteError(err.message || 'Erro ao remover usuário. Verifique se existem contas ou cartões vinculados a esta pessoa.');
     } finally {
       setIsSubmitting(false);
     }
@@ -316,7 +316,10 @@ export const UsuariosView: React.FC = () => {
 
                   <button
                     className="btn btn-danger btn-icon"
-                    onClick={() => setDeletingUser(user)}
+                    onClick={() => {
+                      setDeleteError('');
+                      setDeletingUser(user);
+                    }}
                     title="Excluir"
                   >
                     <Trash2 size={14} />
@@ -512,6 +515,24 @@ export const UsuariosView: React.FC = () => {
               <p style={{ color: 'var(--text-primary)', fontSize: '0.9rem' }}>
                 Tem certeza que deseja remover <strong>{deletingUser.nome}</strong> do sistema?
               </p>
+
+              {deleteError && (
+                <div style={{
+                  padding: '0.65rem 0.85rem',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: '#f87171',
+                  fontSize: '0.8rem',
+                  marginTop: '0.85rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem'
+                }}>
+                  <span>⚠️</span>
+                  <span>{deleteError}</span>
+                </div>
+              )}
             </div>
 
             <div className="modal-footer">

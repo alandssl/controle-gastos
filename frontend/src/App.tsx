@@ -1,4 +1,4 @@
-import React, { useState, Component, ErrorInfo, ReactNode } from 'react';
+import { useState, Component, type ErrorInfo, type ReactNode } from 'react';
 import { FinancialProvider } from './context/FinancialContext';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
@@ -6,7 +6,6 @@ import { DashboardView } from './views/DashboardView';
 import { UsuariosView } from './views/UsuariosView';
 import { GastosChecklistView } from './views/GastosChecklistView';
 import { PagamentosView } from './views/PagamentosView';
-import { WebSocketView } from './views/WebSocketView';
 import type { ActiveTab } from './types';
 
 interface ErrorBoundaryProps {
@@ -111,7 +110,6 @@ export const MainApp: React.FC = () => {
           {currentTab === 'usuarios' && <UsuariosView />}
           {currentTab === 'gastos' && <GastosChecklistView />}
           {currentTab === 'pagamentos' && <PagamentosView />}
-          {currentTab === 'websocket' && <WebSocketView />}
         </main>
       </div>
     </div>

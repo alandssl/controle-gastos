@@ -362,14 +362,11 @@ Para rodar os dois juntos, use dois terminais:
 - [x] Modelagem do banco com Prisma
 - [x] MySQL no Docker
 - [x] CRUD de usuários
-- [ ] CRUD de gastos
-- [ ] CRUD de pagamentos e parcelas
+- [x] CRUD de gastos
+- [x] CRUD de pagamentos e parcelas
 - [ ] CRUD de cartões
-- [ ] Validação de dados com Zod
-- [ ] Resumo mensal (total de gastos x salário)
-- [ ] Tratamento de erros centralizado
-- [ ] Testes automatizados
-- [ ] Deploy
+- [x] Resumo mensal (total de gastos x salário)
+- [x] Testes automatizados
 
 ---
 

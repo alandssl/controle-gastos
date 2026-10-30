@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import type { Usuario, Gasto, FinancialSummary, TipoGasto, TipoPagamento } from '../types';
-import { INITIAL_MOCK_GASTOS, CATEGORIA_CONFIG } from '../data/mockData';
+import type { Usuario, Gasto, Cartao, FinancialSummary, TipoGasto, TipoPagamento, Pagamento } from '../types';
 import { apiService } from '../services/api';
 import { liveSync } from '../services/websocket';
 
@@ -9,6 +8,8 @@ interface FinancialContextType {
   activeUserId: number | 'all';
   activeUser: Usuario | null;
   gastos: Gasto[];
+  cartoes: Cartao[];
+  pagamentos: Pagamento[];
   filteredGastos: Gasto[];
   searchTerm: string;
   categoryFilter: string;
@@ -24,30 +25,44 @@ interface FinancialContextType {
   setStatusFilter: (status: 'all' | 'pago' | 'pendente') => void;
   setPaymentTypeFilter: (type: string) => void;
   refreshUsuarios: (query?: string) => Promise<void>;
+  refreshGastos: () => Promise<void>;
+  refreshPagamentos: () => Promise<void>;
+  refreshCartoes: () => Promise<void>;
   createUsuario: (data: { nome: string; salario: number; diaSalario: number }) => Promise<Usuario>;
   updateUsuario: (data: { id: number; nome: string; salario: number; diaSalario: number }) => Promise<Usuario>;
   deleteUsuario: (id: number) => Promise<boolean>;
-  togglePagamento: (gastoId: number) => void;
-  addGasto: (gasto: Omit<Gasto, 'id'>) => void;
-  deleteGasto: (id: number) => void;
+  togglePagamento: (gastoId: number) => Promise<void>;
+  pagarParcela: (gastoId: number, parcelasPagas?: number) => Promise<void>;
+  vincularPagamento: (
+    gastoId: number, 
+    dados: {
+      tipoPagamento: TipoPagamento;
+      cartaoId?: number | null;
+      cartaoNome?: string;
+      parcelas?: number;
+      valorPago?: number;
+      pagamentoFeito?: boolean;
+      dataPago?: string | null;
+    }
+  ) => Promise<Gasto>;
+  desvincularPagamento: (gastoId: number) => Promise<Gasto>;
+  addGasto: (gasto: Omit<Gasto, 'id'>) => Promise<Gasto>;
+  deleteGasto: (id: number) => Promise<void>;
+  addCartao: (data: { diaVencimento: number; valorFaturaMes: number; usuarioId: number }) => Promise<Cartao>;
+  deleteCartao: (id: number) => Promise<boolean>;
   simulateLiveTransaction: () => void;
 }
 
 const FinancialContext = createContext<FinancialContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_GASTOS_KEY = 'con_checklist_gastos_v1';
+const LOCAL_STORAGE_GASTOS_KEY = 'con_checklist_gastos_api_data';
 
 export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [activeUserId, setActiveUserId] = useState<number | 'all'>('all');
-  const [gastos, setGastos] = useState<Gasto[]>(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_GASTOS_KEY);
-      return stored ? JSON.parse(stored) : INITIAL_MOCK_GASTOS;
-    } catch {
-      return INITIAL_MOCK_GASTOS;
-    }
-  });
+  const [gastos, setGastos] = useState<Gasto[]>([]);
+  const [pagamentos, setPagamentos] = useState<Pagamento[]>([]);
+  const [cartoes, setCartoes] = useState<Cartao[]>([]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -69,11 +84,12 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Load and refresh usuarios from API
   const refreshUsuarios = useCallback(async (query?: string) => {
-    setIsLoading(true);
     try {
       const res = await apiService.getUsuarios(query);
       setUsuarios(res.data);
-      setIsBackendOnline(res.fromBackend);
+      if (res.fromBackend) {
+        setIsBackendOnline(true);
+      }
 
       // If activeUserId not set or invalid, select first user or keep 'all'
       if (activeUserId !== 'all' && !res.data.some(u => u.id === activeUserId)) {
@@ -85,9 +101,44 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     } catch (err) {
       console.error("Falha ao buscar usuários:", err);
-      setIsBackendOnline(false);
-    } finally {
-      setIsLoading(false);
+    }
+  }, [activeUserId]);
+
+  // Load and refresh gastos from API
+  const refreshGastos = useCallback(async () => {
+    try {
+      const userIdParam = activeUserId !== 'all' ? activeUserId : undefined;
+      const res = await apiService.getGastos(userIdParam);
+      setGastos(res.data);
+      if (res.fromBackend) {
+        setIsBackendOnline(true);
+      }
+    } catch (err) {
+      console.error("Falha ao buscar gastos da API:", err);
+    }
+  }, [activeUserId]);
+
+  // Load and refresh pagamentos from API
+  const refreshPagamentos = useCallback(async () => {
+    try {
+      const res = await apiService.getPagamentos();
+      setPagamentos(res.data);
+      if (res.fromBackend) {
+        setIsBackendOnline(true);
+      }
+    } catch (err) {
+      console.error("Falha ao buscar pagamentos da API:", err);
+    }
+  }, []);
+
+  // Load and refresh cartões from API
+  const refreshCartoes = useCallback(async () => {
+    try {
+      const userIdParam = activeUserId !== 'all' ? activeUserId : undefined;
+      const res = await apiService.getCartoes(userIdParam);
+      setCartoes(res.data);
+    } catch (err) {
+      console.error("Falha ao buscar cartões da API:", err);
     }
   }, [activeUserId]);
 
@@ -96,22 +147,29 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     liveSync.connect();
     const unsubWs = liveSync.onStateChange((state) => setIsWsConnected(state));
 
-    refreshUsuarios();
+    const loadAll = async () => {
+      setIsLoading(true);
+      await Promise.all([refreshUsuarios(), refreshGastos(), refreshPagamentos(), refreshCartoes()]);
+      setIsLoading(false);
+    };
+
+    loadAll();
 
     // Listen to real-time events from other tabs or server
     const unsubEvents = liveSync.on('*', (payload) => {
       console.log("[Live Event Received]", payload.type, payload.data);
       if (payload.type === 'USER_CREATED' || payload.type === 'USER_UPDATED' || payload.type === 'USER_DELETED') {
         refreshUsuarios();
-      } else if (payload.type === 'GASTO_UPDATED' || payload.type === 'GASTO_ADDED' || payload.type === 'PAGAMENTO_TOGGLED') {
-        try {
-          const stored = localStorage.getItem(LOCAL_STORAGE_GASTOS_KEY);
-          if (stored) {
-            setGastos(JSON.parse(stored));
-          }
-        } catch (e) {
-          console.error(e);
-        }
+      } else if (
+        payload.type === 'GASTO_UPDATED' || 
+        payload.type === 'GASTO_ADDED' || 
+        payload.type === 'GASTO_DELETED' || 
+        payload.type === 'PAGAMENTO_TOGGLED'
+      ) {
+        refreshGastos();
+        refreshPagamentos();
+      } else if (payload.type === 'CARTAO_CREATED' || payload.type === 'CARTAO_DELETED') {
+        refreshCartoes();
       }
     });
 
@@ -119,7 +177,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       unsubWs();
       unsubEvents();
     };
-  }, [refreshUsuarios]);
+  }, [refreshUsuarios, refreshGastos, refreshPagamentos, refreshCartoes]);
 
   // User actions
   const createUsuario = async (data: { nome: string; salario: number; diaSalario: number }) => {
@@ -144,10 +202,27 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return result.success;
   };
 
+  // Cartão actions
+  const addCartao = async (data: { diaVencimento: number; valorFaturaMes: number; usuarioId: number }) => {
+    const result = await apiService.criarCartao(data);
+    await refreshCartoes();
+    return result.data;
+  };
+
+  const deleteCartao = async (id: number) => {
+    const result = await apiService.deletarCartao(id);
+    await refreshCartoes();
+    return result.success;
+  };
+
   // Toggle payment status for an expense
-  const togglePagamento = (gastoId: number) => {
-    setGastos((prev) => {
-      const updated = prev.map((gasto) => {
+  const togglePagamento = async (gastoId: number) => {
+    const targetGasto = gastos.find((g) => g.id === gastoId);
+    const pId = targetGasto?.pagamentos?.[0]?.id || targetGasto?.pagamentoId;
+
+    // Optimistic UI update
+    setGastos((prev) =>
+      prev.map((gasto) => {
         if (gasto.id === gastoId) {
           const isCurrentlyPaid = gasto.pagamentos.some((p) => p.pagamentoFeito);
           const newStatus = !isCurrentlyPaid;
@@ -162,40 +237,71 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           };
         }
         return gasto;
-      });
+      })
+    );
 
-      // Save and emit real-time event
-      try {
-        localStorage.setItem(LOCAL_STORAGE_GASTOS_KEY, JSON.stringify(updated));
-      } catch {}
-      liveSync.emit('PAGAMENTO_TOGGLED', { gastoId });
-      return updated;
+    await apiService.togglePagamento(gastoId, pId || undefined);
+    await refreshGastos();
+    await refreshPagamentos();
+  };
+
+  // Vincular ou atualizar pagamento de um gasto
+  const vincularPagamento = async (
+    gastoId: number, 
+    dados: {
+      tipoPagamento: TipoPagamento;
+      cartaoId?: number | null;
+      cartaoNome?: string;
+      parcelas?: number;
+      valorPago?: number;
+      pagamentoFeito?: boolean;
+      dataPago?: string | null;
+    }
+  ) => {
+    const result = await apiService.vincularPagamento(gastoId, dados);
+    setGastos((prev) => prev.map((g) => (g.id === gastoId ? result.data : g)));
+    await refreshPagamentos();
+    return result.data;
+  };
+
+  // Paga uma parcela do cartão; ao quitar todas, a compra fica como paga
+  const pagarParcela = async (gastoId: number, parcelasPagas?: number) => {
+    const targetGasto = gastos.find((g) => g.id === gastoId);
+    const pId = targetGasto?.pagamentos?.[0]?.id || targetGasto?.pagamentoId;
+    if (!pId) return;
+
+    await apiService.pagarParcela(pId, parcelasPagas);
+    await refreshGastos();
+    await refreshPagamentos();
+  };
+
+  // Desvincular pagamento de um gasto
+  const desvincularPagamento = async (gastoId: number) => {
+    const result = await apiService.desvincularPagamento(gastoId);
+    setGastos((prev) => prev.map((g) => (g.id === gastoId ? result.data : g)));
+    await refreshPagamentos();
+    return result.data;
+  };
+
+  // Add new expense via API
+  const addGasto = async (gastoData: Omit<Gasto, 'id'>) => {
+    const result = await apiService.criarGasto({
+      descricao: gastoData.descricao,
+      tipoGasto: gastoData.tipoGasto,
+      valorGasto: gastoData.valorGasto,
+      dataGasto: gastoData.dataGasto,
+      usuarioId: gastoData.usuarioId,
+      pagamentos: gastoData.pagamentos,
     });
+    setGastos((prev) => [result.data, ...prev.filter((g) => g.id !== result.data.id)]);
+    await refreshPagamentos();
+    return result.data;
   };
 
-  // Add new expense
-  const addGasto = (gastoData: Omit<Gasto, 'id'>) => {
-    const newId = Math.max(0, ...gastos.map((g) => g.id)) + 1;
-    const newGasto: Gasto = {
-      ...gastoData,
-      id: newId,
-    };
-    const updated = [newGasto, ...gastos];
-    setGastos(updated);
-    try {
-      localStorage.setItem(LOCAL_STORAGE_GASTOS_KEY, JSON.stringify(updated));
-    } catch {}
-    liveSync.emit('GASTO_ADDED', newGasto);
-  };
-
-  // Delete expense
-  const deleteGasto = (id: number) => {
-    const updated = gastos.filter((g) => g.id !== id);
-    setGastos(updated);
-    try {
-      localStorage.setItem(LOCAL_STORAGE_GASTOS_KEY, JSON.stringify(updated));
-    } catch {}
-    liveSync.emit('GASTO_DELETED', { id });
+  // Delete expense via API
+  const deleteGasto = async (id: number) => {
+    setGastos((prev) => prev.filter((g) => g.id !== id));
+    await apiService.deletarGasto(id);
   };
 
   // Simulate a live transaction event from WebSocket / Server
@@ -247,8 +353,12 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
       // Payment type filter
       if (paymentTypeFilter !== 'all') {
-        const matchesType = gasto.pagamentos?.some((p) => p.tipoPagamento === paymentTypeFilter);
-        if (!matchesType) return false;
+        if (paymentTypeFilter === 'SEM_PAGAMENTO') {
+          if (gasto.pagamentos && gasto.pagamentos.length > 0) return false;
+        } else {
+          const matchesType = gasto.pagamentos?.some((p) => p.tipoPagamento === paymentTypeFilter);
+          if (!matchesType) return false;
+        }
       }
       // Status filter (pago / pendente)
       const isPaid = gasto.pagamentos?.some((p) => p.pagamentoFeito);
@@ -379,6 +489,8 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         activeUserId,
         activeUser,
         gastos,
+        cartoes,
+        pagamentos,
         filteredGastos,
         searchTerm,
         categoryFilter,
@@ -394,12 +506,20 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setStatusFilter,
         setPaymentTypeFilter,
         refreshUsuarios,
+        refreshGastos,
+        refreshPagamentos,
+        refreshCartoes,
         createUsuario,
         updateUsuario,
         deleteUsuario,
         togglePagamento,
+    pagarParcela,
+        vincularPagamento,
+        desvincularPagamento,
         addGasto,
         deleteGasto,
+        addCartao,
+        deleteCartao,
         simulateLiveTransaction,
       }}
     >
